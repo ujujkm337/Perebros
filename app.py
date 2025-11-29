@@ -1,69 +1,50 @@
-import os
+from flask import Flask, request
 import requests
-from flask import Flask, request, jsonify
+import os # Необходимо для получения порта
 
-# Инициализация Flask приложения
 app = Flask(__name__)
 
-# --- ВАШ КЛЮЧ API GEMINI ---
-# Рекомендуется хранить ключ в переменных окружения Render, 
-# но для простоты мы оставим его в коде.
-GEMINI_API_KEY = "AIzaSyDBRxMU5FVVSWcSH-_Mmx7h2kwp-67sKbU"
-# ----------------------------
-
-GEMINI_MODEL = "gemini-2.5-flash"
-GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
-
-@app.route('/', methods=['GET'])
-def home():
-    """Простая проверка работоспособности сервера."""
-    return "Gemini Proxy is running!"
+# КОНФИГУРАЦИЯ БЕСПЛАТНОГО API mlvoca.com
+API_URL = "https://mlvoca.com/api/generate"
+MODEL_NAME = "tinyllama" 
+# Используем TinyLlama, так как она самая быстрая и легкая
 
 @app.route('/ask', methods=['POST'])
-def ask_gemini():
-    """
-    Основная функция: принимает prompt от ESP32 и отправляет его в Gemini.
-    """
-    # 1. Получаем PROMPT из JSON-тела запроса от ESP32
+def ask_llm():
     try:
-        data = request.get_json()
-        if not data or 'prompt' not in data:
-            return jsonify({"error": "Missing 'prompt' in request body"}), 400
+        # 1. Получаем prompt от ESP32 (он отправляет только текст вопроса)
+        data = request.json
+        prompt = data.get('prompt', 'Give me a fact about MicroPython.')
         
-        prompt = data['prompt']
-    except Exception as e:
-        return jsonify({"error": f"Invalid JSON or request: {e}"}), 400
+        # 2. Формируем payload для mlvoca.com
+        mlvoca_payload = {
+            "model": MODEL_NAME,
+            "prompt": prompt,
+            "stream": False # Запрашиваем полный ответ
+        }
 
-    # 2. Формируем тело запроса для Gemini API
-    gemini_payload = {
-        "contents": [{"parts": [{"text": prompt}]}]
-    }
-
-    # 3. Отправляем запрос в Gemini
-    try:
+        # 3. Отправляем запрос в mlvoca.com (Render делает HTTPS-запрос)
         response = requests.post(
-            GEMINI_URL,
-            headers={'Content-Type': 'application/json'},
-            json=gemini_payload
+            API_URL, 
+            json=mlvoca_payload, 
+            timeout=30 # Даем 30 секунд на ответ
         )
         
-        # Если Gemini вернул ошибку (например, 400), передаем ее дальше
-        response.raise_for_status() 
-        
-        gemini_response = response.json()
-        
-        # 4. Извлекаем чистый текст ответа
-        text = gemini_response['candidates'][0]['content']['parts'][0]['text']
-        
-        # 5. Возвращаем ответ ESP32 в простом текстовом формате
-        return text, 200
+        # 4. Проверяем статус от mlvoca.com
+        if response.status_code == 200:
+            result_json = response.json()
+            if 'response' in result_json:
+                # Возвращаем ESP32 только чистый текст (без JSON), чтобы он легко его прочитал
+                return result_json['response'], 200, {'Content-Type': 'text/plain'} 
+            else:
+                return "LLM API Error: No response field in result.", 500
+        else:
+            return f"LLM Server Error: Status {response.status_code}", 500
 
-    except requests.exceptions.HTTPError as errh:
-        return jsonify({"error": f"HTTP Error from Gemini: {errh}"}), response.status_code
     except Exception as e:
-        return jsonify({"error": f"Internal Error: {e}"}), 500
+        return f"Proxy Error: {str(e)}", 500
 
 if __name__ == '__main__':
     # Render использует переменную окружения PORT
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
