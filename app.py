@@ -8,7 +8,7 @@ app = Flask(__name__)
 # --- ВАШ КЛЮЧ API GEMINI ---
 # Рекомендуется хранить ключ в переменных окружения Render, 
 # но для простоты мы оставим его в коде.
-GEMINI_API_KEY = "AIzaSyAnmIxt6lrfNsoUKa2YKaX-_9G7QASD9wM"
+GEMINI_API_KEY = "AIzaSyDBRxMU5FVVSWcSH-_Mmx7h2kwp-67sKbU"
 # ----------------------------
 
 GEMINI_MODEL = "gemini-2.5-flash"
