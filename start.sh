@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-gunicorn server:app
+gunicorn --timeout 150 server:app
